@@ -153,9 +153,17 @@ button:hover {
     gap: 10px;
 }
 
-.task-input {
-    width: 20px;
-    height: 20px;
+#taskInput {
+    flex: 1;
+    padding: 16px;
+    padding-right: 40px; /* Make space for voice icon */
+    background-color: var(--secondaryBackground);
+    border: 1px solid purple;
+    border-radius: 10px;
+    outline: none;
+    color: white;
+    margin-right: 10px; /* Add margin if needed */
+    font-size: 18px;
 }
 
 .task.completed{
@@ -193,6 +201,7 @@ button:hover {
     outline: none;
     cursor: pointer;
     transition: 0.3s;
+    right: 60px;
 }
 .input-container {
     position: relative;
@@ -214,6 +223,33 @@ button:hover {
     cursor: pointer;
     width: 70px;
     height: 70px;
+}
+form {
+    margin-top: 60px;
+    width: 100%;
+    display: flex;
+    gap: 10px;
+    position: relative; /* Add this for proper positioning */
+}
+
+.reminder-notification {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background-color: var(--secondaryBackground);
+    border: 2px solid var(--purple);
+    border-radius: 10px;
+    padding: 15px;
+    max-width: 300px;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    animation: slideIn 0.5s ease-out;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
 }
     </style>
 </head>
@@ -241,14 +277,13 @@ button:hover {
             </div>
         </div>
 
-        <form id="taskForm">  
-            <div class="input-container">
-                <input type="text" id="taskInput" placeholder="Write your task" required/>
-                <img src="Images/voice.png" alt="Voice Command" class="voice-icon">
-            </div>
-            <button type="submit" id="newTask">+</button>  
-        </form>
-        
+        <form id="taskForm">
+    <div class="input-container">
+        <input type="text" id="taskInput" placeholder="Write your task" required>
+        <img src="Images/voice.png" alt="Voice Command" class="voice-icon">
+    </div>
+    <button type="submit" id="newTask">+</button>
+</form>
         <ul id="task-list"></ul>  
     </div>
 
@@ -384,6 +419,7 @@ const editTask = async (id) => {
     }
 };
 
+
 // Update progress stats
 const updateStats = () => {
     const completeTasks = tasks.filter(task => task.completed).length;
@@ -408,21 +444,29 @@ const updateTasksList = () => {
 
     tasks.forEach((task) => {
         const listItem = document.createElement("li");
-        const isCompleted = Boolean(Number(task.completed)); // Handle string/number
-
+        listItem.className = "taskItem";
+        
+        const isCompleted = Boolean(Number(task.completed));
+        
         listItem.innerHTML = `
-        <div class="taskItem">
             <div class="task ${isCompleted ? 'completed' : ''}">
-                <input type="checkbox" class="checkbox" ${isCompleted ? 'checked' : ''} 
-                    onclick="toggleTaskComplete(${task.id})"/>
+                <input type="checkbox" class="task-input" ${isCompleted ? 'checked' : ''}/>
                 <p>${task.text}</p>
             </div>
             <div class="icons">
-                <img src="Images/edit.png" onclick="editTask(${task.id})" alt="Edit" />
-                <img src="Images/bin.png" onclick="deleteTask(${task.id})" alt="Delete" />
-            </div>
-        </div>`;
-
+                <img src="Images/edit.png" alt="Edit" />
+                <img src="Images/bin.png" alt="Delete" />
+            </div>`;
+        
+        // Add event listeners after creating the element
+        const checkbox = listItem.querySelector('.task-input');
+        const editBtn = listItem.querySelector('img[alt="Edit"]');
+        const deleteBtn = listItem.querySelector('img[alt="Delete"]');
+        
+        checkbox.addEventListener('change', () => toggleTaskComplete(task.id));
+        editBtn.addEventListener('click', () => editTask(task.id));
+        deleteBtn.addEventListener('click', () => deleteTask(task.id));
+        
         tasksList.appendChild(listItem);
     });
 };
@@ -453,45 +497,80 @@ const blastConfetti = () => {
 document.addEventListener("DOMContentLoaded", () => {
     loadTasks();
     
-    // Voice recognition setup
-    const voiceIcon = document.querySelector(".voice-icon");
-    const taskInput = document.getElementById("taskInput");
+  // Voice recognition setup
+const voiceIcon = document.querySelector(".voice-icon");
+const taskInput = document.getElementById("taskInput");
 
-    if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
-        const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-        recognition.continuous = true;
-        recognition.interimResults = false;
-        recognition.lang = "en-US";
+if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.continuous = false; // Changed from true to false
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+    recognition.maxAlternatives = 1;
+    
+    // Timeout variables
+    let inactivityTimer;
+    const INACTIVITY_TIMEOUT = 10000; // 10 seconds
+    
+    voiceIcon.addEventListener("click", () => {
+        recognition.start();
+        // Start inactivity timer
+        resetInactivityTimer();
+        // Change icon to indicate listening
+        voiceIcon.src = "Images/voice-active.png"; // You'll need this image
+    });
 
-        voiceIcon.addEventListener("click", () => recognition.start());
-
-        recognition.onresult = async (event) => {
-            const voiceText = event.results[0][0].transcript.toLowerCase().trim();
-            console.log("Voice Command:", voiceText);
-
-            if (voiceText.startsWith("add")) {
-                const newTask = voiceText.replace("add", "").trim();
-                if (newTask) {
-                    taskInput.value = newTask;
-                    addTask();
-                }
-            } else if (voiceText.startsWith("delete")) {
-                const taskToDelete = voiceText.replace("delete", "").trim();
-                await deleteTaskByName(taskToDelete);
-            } else if (voiceText.startsWith("complete")) {
-                const taskToComplete = voiceText.replace("complete", "").trim();
-                await completeTaskByName(taskToComplete);
-            } else {
-                taskInput.value = voiceText;
+    recognition.onresult = async (event) => {
+        const voiceText = event.results[0][0].transcript.toLowerCase().trim();
+        console.log("Voice Command:", voiceText);
+        
+        if (voiceText.startsWith("add")) {
+            const newTask = voiceText.replace("add", "").trim();
+            if (newTask) {
+                taskInput.value = newTask;
+                await addTask();
             }
-        };
+        } else if (voiceText.startsWith("delete")) {
+            const taskToDelete = voiceText.replace("delete", "").trim();
+            await deleteTaskByName(taskToDelete);
+        } else if (voiceText.startsWith("complete")) {
+            const taskToComplete = voiceText.replace("complete", "").trim();
+            await completeTaskByName(taskToComplete);
+        } else {
+            taskInput.value = voiceText;
+        }
+        
+        // Reset timer after getting a result
+        resetInactivityTimer();
+    };
 
-        recognition.onerror = (event) => {
-            console.error("Speech recognition error:", event.error);
-        };
-    } else {
-        voiceIcon.style.display = "none";
+    recognition.onerror = (event) => {
+        console.error("Speech recognition error:", event.error);
+        stopRecognition();
+    };
+    
+    recognition.onend = () => {
+        // Reset icon when recognition ends
+        voiceIcon.src = "Images/voice.png";
+        clearTimeout(inactivityTimer);
+    };
+    
+    function resetInactivityTimer() {
+        clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(() => {
+            recognition.stop();
+            console.log("Voice recognition stopped due to inactivity");
+        }, INACTIVITY_TIMEOUT);
     }
+    
+    function stopRecognition() {
+        recognition.stop();
+        clearTimeout(inactivityTimer);
+        voiceIcon.src = "Images/voice.png";
+    }
+} else {
+    voiceIcon.style.display = "none";
+}
 
     // Form submission
     document.getElementById("taskForm").addEventListener("submit", function(e) {
@@ -525,6 +604,37 @@ const completeTaskByName = async (taskName) => {
         alert(`Task "${taskName}" not found.`);
     }
 };
+
+function showReminderNotification(tasks) {
+    const notification = document.createElement('div');
+    notification.className = 'reminder-notification';
+    notification.innerHTML = `
+        <div class="reminder-content">
+            <h3>⏰ Task Reminder</h3>
+            <p>You have ${tasks.length} uncompleted task(s):</p>
+            <ul>
+                ${tasks.map(task => `<li>${task.task_text}</li>`).join('')}
+            </ul>
+            <button class="reminder-close">OK</button>
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    notification.querySelector('.reminder-close').addEventListener('click', () => {
+        notification.remove();
+    });
+    
+    setTimeout(() => {
+        if (document.body.contains(notification)) {
+            notification.remove();
+        }
+    }, 30000);
+}
+
+window.toggleTaskComplete = toggleTaskComplete;
+window.editTask = editTask;
+window.deleteTask = deleteTask;
     </script>
     <script src="https://cdn.jsdelivr.net/npm/@tsparticles/confetti@3.0.3/tsparticles.confetti.bundle.min.js"></script>
 </body>

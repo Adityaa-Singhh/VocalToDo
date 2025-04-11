@@ -37,12 +37,52 @@ try {
                     $stmt->execute([$completed, $input['id'], $user_id]);
                     $response = ['success' => true];
                     break;
+                    
+                case 'delete':
+                    $stmt = $pdo->prepare("DELETE FROM tasks WHERE id = ? AND user_id = ?");
+                    $stmt->execute([$input['id'], $user_id]);
+                    $response = ['success' => $stmt->rowCount() > 0];
+                    break;
+                    
+                case 'edit':
+                    $stmt = $pdo->prepare("UPDATE tasks SET task_text = ? WHERE id = ? AND user_id = ?");
+                    $stmt->execute([$input['newText'], $input['id'], $user_id]);
+                    $response = ['success' => $stmt->rowCount() > 0];
+                    break;
+                    
+                // New reminder system endpoints
+                case 'get_uncompleted_tasks':
+                    $stmt = $pdo->prepare("SELECT id, task_text FROM tasks WHERE user_id = ? AND completed = 0");
+                    $stmt->execute([$user_id]);
+                    $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                    $response = ['success' => true, 'tasks' => $tasks];
+                    break;
+                    
+                case 'update_reminder_time':
+                    // Check if reminders table exists, create if not
+                    $pdo->exec("CREATE TABLE IF NOT EXISTS user_reminders (
+                        user_id INT PRIMARY KEY,
+                        last_reminder_time TIMESTAMP NULL,
+                        FOREIGN KEY (user_id) REFERENCES users(id)
+                    )");
+                    
+                    $stmt = $pdo->prepare("INSERT INTO user_reminders (user_id, last_reminder_time) 
+                                         VALUES (?, NOW()) 
+                                         ON DUPLICATE KEY UPDATE last_reminder_time = NOW()");
+                    $stmt->execute([$user_id]);
+                    $response = ['success' => true];
+                    break;
+                    
+                default:
+                    $response['error'] = 'Invalid action';
             }
+        } else {
+            $response['error'] = 'No action specified';
         }
     }
 } catch (PDOException $e) {
     $response['error'] = 'Database error: ' . $e->getMessage();
 }
 
-echo json_encode($response, JSON_NUMERIC_CHECK); // Force numbers to stay as numbers
+echo json_encode($response, JSON_NUMERIC_CHECK);
 ?>
